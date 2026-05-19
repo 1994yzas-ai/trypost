@@ -37,7 +37,7 @@ class SyncUser implements ShouldQueue
             return;
         }
 
-        $postHog->identify((string) $user->id, [
+        $postHog->identify($user->id, [
             '$email' => $user->email,
             '$name' => $user->name,
             '$set_once' => ['signed_up_at' => $user->created_at?->toIso8601String()],
@@ -45,8 +45,8 @@ class SyncUser implements ShouldQueue
 
         if ($user->account_id) {
             SyncAccountUsage::dispatch(
-                (string) $user->account_id,
-                $user->current_workspace_id ? (string) $user->current_workspace_id : null,
+                $user->account_id,
+                $user->current_workspace_id ? $user->current_workspace_id : null,
             );
         }
     }
