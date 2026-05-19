@@ -29,6 +29,29 @@ export const PLATFORM_VARIANTS: Record<string, string[]> = {
     [Platform.Pinterest]: [ContentType.PinterestPin, ContentType.PinterestVideoPin, ContentType.PinterestCarousel],
 };
 
+type MetaRule = (meta: Record<string, any>) => { valid: boolean; tooltipKey: string | null };
+
+// Platforms whose `meta` blob has publish-time requirements. `valid` gates
+// scheduling; `tooltipKey` (when set) surfaces a platform-specific message
+// — null means "blocks the publish but no dedicated message, fall through
+// to the generic incomplete tooltip".
+const PLATFORM_META_RULES: Record<string, MetaRule> = {
+    [Platform.TikTok]: (meta) => {
+        const disclosureIncomplete = Boolean(meta.disclose)
+            && !meta.brand_organic_toggle
+            && !meta.brand_content_toggle;
+        const privacyLevelMissing = !meta.privacy_level;
+        return {
+            valid: !disclosureIncomplete && !privacyLevelMissing,
+            tooltipKey: disclosureIncomplete ? 'posts.form.tiktok.compliance_incomplete' : null,
+        };
+    },
+    [Platform.Pinterest]: (meta) => ({
+        valid: Boolean(meta.board_id),
+        tooltipKey: meta.board_id ? null : 'posts.form.pinterest.board_required',
+    }),
+};
+
 export const getMediaIncompatibilityReason = (
     contentType: string,
     mediaItems: MediaItem[],
@@ -94,14 +117,16 @@ interface UsePostComplianceOptions {
 export const usePostCompliance = (opts: UsePostComplianceOptions) => {
     const { post, content, media, selectedPlatformIds, platformContentTypes, platformMeta, platformConfigs } = opts;
 
+    const selectedPlatforms = computed(() => post.value.post_platforms.filter(
+        (pp) => selectedPlatformIds.value.includes(pp.id),
+    ));
+
     const platformLimits = computed(() => {
         const seen = new Set<string>();
         const result: { platform: string; maxLength: number }[] = [];
-        for (const pp of post.value.post_platforms) {
-            if (!selectedPlatformIds.value.includes(pp.id)) continue;
+        for (const pp of selectedPlatforms.value) {
             if (seen.has(pp.platform)) continue;
-            const accountId = pp.social_account_id;
-            const max = accountId ? platformConfigs[accountId]?.maxContentLength : null;
+            const max = pp.social_account_id ? platformConfigs[pp.social_account_id]?.maxContentLength : null;
             if (typeof max === 'number' && max > 0) {
                 seen.add(pp.platform);
                 result.push({ platform: pp.platform, maxLength: max });
@@ -115,8 +140,7 @@ export const usePostCompliance = (opts: UsePostComplianceOptions) => {
         for (const item of media.value) {
             const issues: { platform: string; reason: string }[] = [];
             const seen = new Set<string>();
-            for (const pp of post.value.post_platforms) {
-                if (!selectedPlatformIds.value.includes(pp.id)) continue;
+            for (const pp of selectedPlatforms.value) {
                 if (seen.has(pp.platform)) continue;
                 const contentType = platformContentTypes.value[pp.id] ?? pp.content_type ?? '';
                 const reason = getMediaItemIssue(item, contentType);
@@ -144,9 +168,7 @@ export const usePostCompliance = (opts: UsePostComplianceOptions) => {
             if (!reason) continue;
 
             const isSelected = selectedPlatformIds.value.includes(pp.id);
-            if (!isSelected && firstCompatibleVariant(pp.platform, media.value)) {
-                continue;
-            }
+            if (!isSelected && firstCompatibleVariant(pp.platform, media.value)) continue;
 
             issues[pp.id] = reason;
         }
@@ -154,30 +176,11 @@ export const usePostCompliance = (opts: UsePostComplianceOptions) => {
         return issues;
     });
 
-    const mediaCompliancePerPlatformValid = computed(
-        () => selectedPlatformIds.value.every((id) => !platformIssues.value[id]),
-    );
-
-    // TikTok requires explicit privacy_level; when disclosure is on, at least
-    // one brand sub-toggle (organic/content) must also be selected.
-    const tiktokComplianceValid = computed(() => {
-        const tiktokPlatforms = post.value.post_platforms.filter(
-            (pp) => pp.platform === Platform.TikTok && selectedPlatformIds.value.includes(pp.id),
-        );
-        return tiktokPlatforms.every((pp) => {
-            const meta = platformMeta.value[pp.id] ?? {};
-            if (!meta.privacy_level) return false;
-            if (meta.disclose && !meta.brand_organic_toggle && !meta.brand_content_toggle) return false;
-            return true;
-        });
-    });
-
-    const pinterestComplianceValid = computed(() => {
-        const pinterestPlatforms = post.value.post_platforms.filter(
-            (pp) => pp.platform === Platform.Pinterest && selectedPlatformIds.value.includes(pp.id),
-        );
-        return pinterestPlatforms.every((pp) => Boolean(platformMeta.value[pp.id]?.board_id));
-    });
+    const platformMetaResults = computed(() => selectedPlatforms.value.map((pp) => {
+        const rule = PLATFORM_META_RULES[pp.platform];
+        if (!rule) return { valid: true, tooltipKey: null };
+        return rule(platformMeta.value[pp.id] ?? {});
+    }));
 
     const hasContentOrMedia = computed(
         () => content.value.trim().length > 0 || media.value.length > 0,
@@ -190,19 +193,20 @@ export const usePostCompliance = (opts: UsePostComplianceOptions) => {
             .map((p) => ({ platform: p.platform, limit: p.maxLength, over: len - p.maxLength }));
     });
 
-    const canSchedule = computed(
-        () => mediaCompliancePerPlatformValid.value
-            && tiktokComplianceValid.value
-            && pinterestComplianceValid.value
+    const canSchedule = computed(() => {
+        const mediaValid = selectedPlatformIds.value.every((id) => !platformIssues.value[id]);
+        const metaValid = platformMetaResults.value.every((r) => r.valid);
+        return mediaValid
+            && metaValid
             && hasContentOrMedia.value
-            && contentLengthOverflows.value.length === 0,
-    );
+            && contentLengthOverflows.value.length === 0;
+    });
 
     const postActionTooltip = computed(() => {
         if (canSchedule.value) return '';
 
-        const mediaReasons = post.value.post_platforms
-            .filter((pp) => selectedPlatformIds.value.includes(pp.id) && platformIssues.value[pp.id])
+        const mediaReasons = selectedPlatforms.value
+            .filter((pp) => platformIssues.value[pp.id])
             .map((pp) => `${pp.platform_name ?? pp.platform}: ${platformIssues.value[pp.id]}`);
 
         const lengthReasons = contentLengthOverflows.value.map((overflow) => trans('posts.form.content_exceeds_platform', {
@@ -211,27 +215,13 @@ export const usePostCompliance = (opts: UsePostComplianceOptions) => {
             over: String(overflow.over),
         }));
 
-        const reasons = [...mediaReasons, ...lengthReasons];
-        if (reasons.length > 0) return reasons.join('\n');
+        const combined = [...mediaReasons, ...lengthReasons].join('\n');
+        if (combined) return combined;
 
-        const tiktokDisclosureIncomplete = post.value.post_platforms.some((pp) => {
-            if (pp.platform !== Platform.TikTok) return false;
-            if (!selectedPlatformIds.value.includes(pp.id)) return false;
-            const meta = platformMeta.value[pp.id] ?? {};
-            return Boolean(meta.disclose) && !meta.brand_organic_toggle && !meta.brand_content_toggle;
-        });
+        const metaTooltipKey = platformMetaResults.value.find((r) => r.tooltipKey)?.tooltipKey;
+        if (metaTooltipKey) return trans(metaTooltipKey);
 
-        if (tiktokDisclosureIncomplete) {
-            return trans('posts.form.tiktok.compliance_incomplete');
-        }
-
-        if (!pinterestComplianceValid.value) {
-            return trans('posts.form.pinterest.board_required');
-        }
-
-        if (!hasContentOrMedia.value) {
-            return trans('posts.edit.compliance.requires_content_or_media');
-        }
+        if (!hasContentOrMedia.value) return trans('posts.edit.compliance.requires_content_or_media');
 
         return trans('posts.edit.compliance_incomplete');
     });
@@ -240,11 +230,6 @@ export const usePostCompliance = (opts: UsePostComplianceOptions) => {
         platformLimits,
         mediaIssues,
         platformIssues,
-        mediaCompliancePerPlatformValid,
-        tiktokComplianceValid,
-        pinterestComplianceValid,
-        hasContentOrMedia,
-        contentLengthOverflows,
         canSchedule,
         postActionTooltip,
     };

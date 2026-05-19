@@ -143,7 +143,6 @@ const {
     platformLimits,
     mediaIssues,
     platformIssues,
-    contentLengthOverflows,
     canSchedule,
     postActionTooltip,
 } = usePostCompliance({
