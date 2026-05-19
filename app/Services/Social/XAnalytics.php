@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use App\Enums\SocialAccount\Platform;
 use App\Exceptions\TokenExpiredException;
 use App\Models\PostPlatform;
 use App\Models\SocialAccount;
@@ -206,18 +207,13 @@ class XAnalytics
             throw new TokenExpiredException('No refresh token available for X account');
         }
 
-        $response = $this->socialHttp()
+        $response = TokenRefreshClient::for(Platform::X)->send(fn () => $this->socialHttp()
             ->withBasicAuth(config('services.x.client_id'), config('services.x.client_secret'))
             ->asForm()
             ->post(config('trypost.platforms.x.api').'/oauth2/token', [
                 'grant_type' => 'refresh_token',
                 'refresh_token' => $account->refresh_token,
-            ]);
-
-        if ($response->failed()) {
-            Log::error('X token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-            throw new TokenExpiredException('X token refresh failed');
-        }
+            ]));
 
         $data = $response->json();
 

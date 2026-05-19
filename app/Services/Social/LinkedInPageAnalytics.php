@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use App\Enums\SocialAccount\Platform;
 use App\Exceptions\TokenExpiredException;
 use App\Models\PostPlatform;
 use App\Models\SocialAccount;
@@ -240,17 +241,13 @@ class LinkedInPageAnalytics
             throw new TokenExpiredException('No refresh token available for LinkedIn Page account');
         }
 
-        $response = Http::asForm()->post(config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken', [
-            'grant_type' => 'refresh_token',
-            'refresh_token' => $account->refresh_token,
-            'client_id' => config('services.linkedin-openid.client_id'),
-            'client_secret' => config('services.linkedin-openid.client_secret'),
-        ]);
-
-        if ($response->failed()) {
-            Log::error('LinkedIn token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-            throw new TokenExpiredException('LinkedIn token refresh failed');
-        }
+        $response = TokenRefreshClient::for(Platform::LinkedInPage)->send(fn () => Http::asForm()
+            ->post(config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken', [
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $account->refresh_token,
+                'client_id' => config('services.linkedin-openid.client_id'),
+                'client_secret' => config('services.linkedin-openid.client_secret'),
+            ]));
 
         $data = $response->json();
 

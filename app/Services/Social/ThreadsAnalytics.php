@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
-use App\Exceptions\TokenExpiredException;
+use App\Enums\SocialAccount\Platform;
 use App\Models\PostPlatform;
 use App\Models\SocialAccount;
 use App\Services\Social\Concerns\HasSocialHttpClient;
@@ -141,15 +141,10 @@ class ThreadsAnalytics
 
     private function refreshToken(SocialAccount $account): void
     {
-        $response = Http::get(config('trypost.platforms.threads.auth_api').'/refresh_access_token', [
+        $response = TokenRefreshClient::for(Platform::Threads)->send(fn () => Http::get(config('trypost.platforms.threads.auth_api').'/refresh_access_token', [
             'grant_type' => 'th_refresh_token',
             'access_token' => $account->access_token,
-        ]);
-
-        if ($response->failed()) {
-            Log::error('Threads token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-            throw new TokenExpiredException('Threads token refresh failed');
-        }
+        ]));
 
         $data = $response->json();
 

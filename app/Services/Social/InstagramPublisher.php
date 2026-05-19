@@ -8,7 +8,6 @@ use App\Enums\PostPlatform\ContentType;
 use App\Enums\SocialAccount\Platform;
 use App\Exceptions\Social\ErrorCategory;
 use App\Exceptions\Social\InstagramPublishException;
-use App\Exceptions\TokenExpiredException;
 use App\Models\PostPlatform;
 use App\Models\SocialAccount;
 use App\Services\Media\MediaOptimizer;
@@ -403,16 +402,10 @@ class InstagramPublisher
             return;
         }
 
-        $response = Http::get(config('trypost.platforms.instagram.auth_api').'/refresh_access_token', [
+        $response = TokenRefreshClient::for(Platform::Instagram)->send(fn () => Http::get(config('trypost.platforms.instagram.auth_api').'/refresh_access_token', [
             'grant_type' => 'ig_refresh_token',
             'access_token' => $account->access_token,
-        ]);
-
-        if ($response->failed()) {
-            Log::error('Instagram token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-
-            throw new TokenExpiredException('Failed to refresh Instagram token');
-        }
+        ]));
 
         $data = $response->json();
         $newToken = data_get($data, 'access_token');

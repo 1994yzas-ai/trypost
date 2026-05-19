@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use App\Enums\SocialAccount\Platform;
 use App\Exceptions\Social\ErrorCategory;
 use App\Exceptions\Social\YouTubePublishException;
 use App\Exceptions\TokenExpiredException;
@@ -229,18 +230,13 @@ class YouTubePublisher
             throw new TokenExpiredException('No refresh token available for YouTube account');
         }
 
-        $response = Http::asForm()->post(config('trypost.platforms.youtube.oauth_api').'/token', [
-            'client_id' => config('services.google.client_id'),
-            'client_secret' => config('services.google.client_secret'),
-            'grant_type' => 'refresh_token',
-            'refresh_token' => $account->refresh_token,
-        ]);
-
-        if ($response->failed()) {
-            Log::error('YouTube token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-
-            throw new TokenExpiredException('Failed to refresh YouTube token');
-        }
+        $response = TokenRefreshClient::for(Platform::YouTube)->send(fn () => Http::asForm()
+            ->post(config('trypost.platforms.youtube.oauth_api').'/token', [
+                'client_id' => config('services.google.client_id'),
+                'client_secret' => config('services.google.client_secret'),
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $account->refresh_token,
+            ]));
 
         $data = $response->json();
 

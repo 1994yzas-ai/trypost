@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use App\Enums\SocialAccount\Platform;
 use App\Exceptions\TokenExpiredException;
 use App\Models\SocialAccount;
 use App\Services\Social\Concerns\HasSocialHttpClient;
@@ -166,17 +167,13 @@ class TikTokAnalytics
             throw new TokenExpiredException('No refresh token available for TikTok account');
         }
 
-        $response = Http::asForm()->post(config('trypost.platforms.tiktok.api').'/oauth/token/', [
-            'client_key' => config('services.tiktok.client_id'),
-            'client_secret' => config('services.tiktok.client_secret'),
-            'grant_type' => 'refresh_token',
-            'refresh_token' => $account->refresh_token,
-        ]);
-
-        if ($response->failed()) {
-            Log::error('TikTok token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-            throw new TokenExpiredException('TikTok token refresh failed');
-        }
+        $response = TokenRefreshClient::for(Platform::TikTok)->send(fn () => Http::asForm()
+            ->post(config('trypost.platforms.tiktok.api').'/oauth/token/', [
+                'client_key' => config('services.tiktok.client_id'),
+                'client_secret' => config('services.tiktok.client_secret'),
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $account->refresh_token,
+            ]));
 
         $data = $response->json();
 

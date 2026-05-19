@@ -10,6 +10,7 @@ use App\Enums\PostPlatform\Status as PostPlatformStatus;
 use App\Enums\SocialAccount\Platform as SocialPlatform;
 use App\Enums\SocialAccount\Status;
 use App\Events\PostPlatformStatusUpdated;
+use App\Exceptions\PlatformUnavailableException;
 use App\Exceptions\Social\SocialPublishException;
 use App\Exceptions\TokenExpiredException;
 use App\Mail\PostPublished;
@@ -109,6 +110,19 @@ class PublishToSocialPlatform implements ShouldQueue
                 $publisher = $this->getPublisher();
                 $result = $publisher->publish($this->postPlatform);
                 $this->postPlatform->markAsPublished(data_get($result, 'id'), data_get($result, 'url'));
+                break;
+            } catch (PlatformUnavailableException $e) {
+                Log::warning('Publish skipped: platform unavailable', [
+                    'post_platform_id' => $this->postPlatform->id,
+                    'platform' => $this->postPlatform->platform->value,
+                    'error' => $e->getMessage(),
+                ]);
+
+                $this->postPlatform->markAsFailed($e->getMessage(), [
+                    'category' => 'platform_unavailable',
+                    'http_status' => $e->httpStatus,
+                    'failed_at' => now()->toIso8601String(),
+                ]);
                 break;
             } catch (TokenExpiredException $e) {
                 if ($attempt < $maxAttempts) {

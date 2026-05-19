@@ -60,7 +60,13 @@ class TokenRefreshClient
             Log::error("TokenRefreshClient: {$name} token refresh failed", [
                 'body' => $this->redactBody($response->body()),
             ]);
-            throw new TokenExpiredException("Failed to refresh {$name} token");
+
+            $body = $response->json();
+            $message = data_get($body, 'error_description')
+                ?? data_get($body, 'error.message')
+                ?? "Failed to refresh {$name} token";
+
+            throw new TokenExpiredException($message, platformErrorCode: (string) $response->status());
         }
 
         return $response;

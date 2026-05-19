@@ -211,15 +211,10 @@ class InstagramAnalytics
             throw new TokenExpiredException('No refresh token available for Instagram account');
         }
 
-        $response = Http::get(config('trypost.platforms.instagram.auth_api').'/refresh_access_token', [
+        $response = TokenRefreshClient::for(Platform::Instagram)->send(fn () => Http::get(config('trypost.platforms.instagram.auth_api').'/refresh_access_token', [
             'grant_type' => 'ig_refresh_token',
             'access_token' => $account->access_token,
-        ]);
-
-        if ($response->failed()) {
-            Log::error('Instagram token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-            throw new TokenExpiredException('Instagram token refresh failed');
-        }
+        ]));
 
         $data = $response->json();
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use App\Enums\SocialAccount\Platform;
 use App\Exceptions\TokenExpiredException;
 use App\Models\PostPlatform;
 use App\Models\SocialAccount;
@@ -167,18 +168,13 @@ class PinterestAnalytics
             throw new TokenExpiredException('No refresh token available for Pinterest account');
         }
 
-        $response = Http::withBasicAuth(
+        $response = TokenRefreshClient::for(Platform::Pinterest)->send(fn () => Http::withBasicAuth(
             config('services.pinterest.client_id'),
             config('services.pinterest.client_secret'),
         )->asForm()->post(config('trypost.platforms.pinterest.api').'/oauth/token', [
             'grant_type' => 'refresh_token',
             'refresh_token' => $account->refresh_token,
-        ]);
-
-        if ($response->failed()) {
-            Log::error('Pinterest token refresh failed', ['body' => $this->redactResponseBody($response->body())]);
-            throw new TokenExpiredException('Pinterest token refresh failed');
-        }
+        ]));
 
         $data = $response->json();
 
