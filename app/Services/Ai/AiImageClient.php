@@ -28,6 +28,8 @@ class AiImageClient
         string $orientation = 'portrait',
         string $language = 'en',
         ?string $brandColor = null,
+        ?string $backgroundColor = null,
+        ?string $textColor = null,
         ?string $brandDescription = null,
         string $quality = 'low',
         int $timeout = 180,
@@ -37,9 +39,7 @@ class AiImageClient
             return null;
         }
 
-        $brandColorName = $brandColor !== null
-            ? HexColorName::approximate($brandColor)
-            : null;
+        $palette = $this->buildPaletteContext($brandColor, $backgroundColor, $textColor);
 
         $brandContext = null;
         if ($brandDescription !== null) {
@@ -55,7 +55,10 @@ class AiImageClient
             'style' => $style->value,
             'scene' => implode(', ', $clean),
             'language_name' => $this->languageName($language),
-            'brand_color_name' => $brandColorName,
+            'has_brand_palette' => data_get($palette, 'is_defined', false),
+            'brand_color_name' => data_get($palette, 'brand_color_name'),
+            'background_color_name' => data_get($palette, 'background_color_name'),
+            'text_color_name' => data_get($palette, 'text_color_name'),
             'brand_context' => $brandContext,
         ])->render();
 
@@ -91,5 +94,39 @@ class AiImageClient
             'es' => 'Spanish',
             default => 'English',
         };
+    }
+
+    /**
+     * @return array{
+     *   is_defined: bool,
+     *   brand_color_name: ?string,
+     *   background_color_name: ?string,
+     *   text_color_name: ?string
+     * }
+     */
+    private function buildPaletteContext(
+        ?string $brandColor,
+        ?string $backgroundColor,
+        ?string $textColor,
+    ): array {
+        $brandColorName = $this->resolveColorName($brandColor);
+        $backgroundColorName = $this->resolveColorName($backgroundColor);
+        $textColorName = $this->resolveColorName($textColor);
+
+        return [
+            'is_defined' => $brandColorName !== null || $backgroundColorName !== null || $textColorName !== null,
+            'brand_color_name' => $brandColorName,
+            'background_color_name' => $backgroundColorName,
+            'text_color_name' => $textColorName,
+        ];
+    }
+
+    private function resolveColorName(?string $hex): ?string
+    {
+        if ($hex === null || trim($hex) === '') {
+            return null;
+        }
+
+        return HexColorName::approximate($hex);
     }
 }

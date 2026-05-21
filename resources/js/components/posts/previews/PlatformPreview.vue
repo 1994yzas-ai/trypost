@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import type { MediaItem } from '@/types/media';
+
 import BlueskyPreview from './BlueskyPreview.vue';
 import FacebookPreview from './FacebookPreview.vue';
 import InstagramPreview from './InstagramPreview.vue';
@@ -18,14 +20,6 @@ interface SocialAccount {
     display_name: string;
     username: string;
     avatar_url: string | null;
-}
-
-interface MediaItem {
-    id: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
 }
 
 interface Props {

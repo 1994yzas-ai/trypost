@@ -3,9 +3,10 @@ import { IconAlertTriangle, IconChevronDown, IconChevronUp } from '@tabler/icons
 import { computed, ref } from 'vue';
 
 import { Avatar } from '@/components/ui/avatar';
-import { getMediaValidationWarning, type MediaItem } from '@/composables/useMedia';
+import { getMediaValidationWarning } from '@/composables/useMedia';
 import { getPlatformLogo } from '@/composables/usePlatformLogo';
 import { ContentType } from '@/enums/content-type';
+import type { MediaItem } from '@/types/media';
 
 interface SocialAccount {
     id: string;

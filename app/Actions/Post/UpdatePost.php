@@ -9,6 +9,7 @@ use App\Enums\Post\Status as PostStatus;
 use App\Jobs\PublishPost;
 use App\Models\Post;
 use App\Models\Workspace;
+use App\Support\PostStatusRules;
 use Carbon\Carbon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -20,9 +21,7 @@ class UpdatePost
      */
     public static function execute(Workspace $workspace, Post $post, array $data): array
     {
-        $terminalStatuses = [PostStatus::Published, PostStatus::PartiallyPublished, PostStatus::Failed, PostStatus::Publishing];
-
-        if (in_array($post->status, $terminalStatuses, true)) {
+        if (PostStatusRules::blocksEditing($post)) {
             return ['post' => $post, 'action' => PostAction::Finalized];
         }
 

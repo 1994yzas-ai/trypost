@@ -6,6 +6,7 @@ import { computed, onUnmounted, ref, watch } from 'vue';
 
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue';
 import AiGenerateDialog from '@/components/posts/ai/AiGenerateDialog.vue';
+import AiRegenerateImageDialog from '@/components/posts/ai/AiRegenerateImageDialog.vue';
 import AiReviewDialog from '@/components/posts/ai/AiReviewDialog.vue';
 import PostEditorComposer from '@/components/posts/editor/PostEditorComposer.vue';
 import PostEditorHeader from '@/components/posts/editor/PostEditorHeader.vue';
@@ -22,18 +23,8 @@ import debounce from '@/debounce';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { destroy as destroyPost, update as updatePost } from '@/routes/app/posts';
 import type { PinterestBoard } from '@/types';
+import type { MediaItem } from '@/types/media';
 import { PostStatus } from '@/types/post';
-
-interface MediaItem {
-    id: string;
-    path: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-    size?: number;
-    meta?: { width?: number; height?: number; duration?: number };
-}
 
 interface SocialAccount {
     id: string;
@@ -176,6 +167,8 @@ const isSaving = ref(false);
 const showSaved = ref(false);
 const isAiGenerateOpen = ref(false);
 const isAiReviewOpen = ref(false);
+const isAiRegenerateImageOpen = ref(false);
+const selectedAiMediaId = ref<string | null>(null);
 
 const onAiGenerateApply = (newContent: string) => {
     content.value = newContent;
@@ -183,6 +176,23 @@ const onAiGenerateApply = (newContent: string) => {
 
 const onAiReviewApply = (original: string, suggestion: string) => {
     content.value = content.value.replace(original, suggestion);
+};
+
+const onOpenAiRegenerateImage = (mediaId: string) => {
+    selectedAiMediaId.value = mediaId;
+    isAiRegenerateImageOpen.value = true;
+};
+
+const selectedAiMediaItem = computed(() => (
+    selectedAiMediaId.value
+        ? (media.value.find((item) => item.id === selectedAiMediaId.value) ?? null)
+        : null
+));
+
+const onAiMediaRegenerated = (payload: { media: MediaItem; targetMediaId: string }) => {
+    media.value = media.value.map((item) => (
+        item.id === payload.targetMediaId ? payload.media : item
+    ));
 };
 
 const isPostActionDisabled = computed(
@@ -384,8 +394,10 @@ usePostEcho(post.value.id, '.post.comment.created', (e: any) => {
                             :signatures="signatures"
                             :platform-limits="platformLimits"
                             :media-issues="mediaIssues"
+                            :allow-ai-regenerate="!isLocked"
                             @open-ai-generate="isAiGenerateOpen = true"
                             @open-ai-review="isAiReviewOpen = true"
+                            @open-ai-regenerate-image="onOpenAiRegenerateImage"
                         />
                     </div>
 
@@ -440,5 +452,12 @@ usePostEcho(post.value.id, '.post.comment.created', (e: any) => {
         :post-id="post.id"
         :content="content"
         @apply="onAiReviewApply"
+    />
+
+    <AiRegenerateImageDialog
+        v-model:open="isAiRegenerateImageOpen"
+        :post-id="post.id"
+        :media-item="selectedAiMediaItem"
+        @regenerated="onAiMediaRegenerated"
     />
 </template>

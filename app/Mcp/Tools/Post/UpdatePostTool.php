@@ -11,6 +11,7 @@ use App\Enums\PostPlatform\ContentType;
 use App\Http\Resources\Api\PostResource;
 use App\Models\Post;
 use App\Rules\ContentTypeMatchesPostPlatform;
+use App\Support\PostStatusRules;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Validation\Rule;
 use Laravel\Mcp\Request;
@@ -55,7 +56,7 @@ class UpdatePostTool extends Tool
         $result = UpdatePost::execute($workspace, $post, $payload);
 
         if (data_get($result, 'action') === PostAction::Finalized) {
-            return Response::error('Cannot edit a post in a terminal state.');
+            return Response::error(PostStatusRules::editBlockedMessage());
         }
 
         /** @var Post $updated */

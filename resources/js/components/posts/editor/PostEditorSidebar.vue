@@ -6,17 +6,7 @@ import PreviewTab from '@/components/posts/editor/PreviewTab.vue';
 import ScheduleTab from '@/components/posts/editor/ScheduleTab.vue';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { PinterestBoard } from '@/types';
-
-interface MediaItem {
-    id: string;
-    path: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-    size?: number;
-    meta?: { width?: number; height?: number; duration?: number };
-}
+import type { MediaItem } from '@/types/media';
 
 interface SocialAccount {
     id: string;

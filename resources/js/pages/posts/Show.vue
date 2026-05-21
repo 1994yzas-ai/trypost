@@ -18,15 +18,8 @@ import { getPlatformStatusConfig, getPostStatusConfig } from '@/composables/useP
 import dayjs from '@/dayjs';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { index as postsIndex } from '@/routes/app/posts';
+import type { MediaItem } from '@/types/media';
 import { PostPlatformStatus, PostStatus } from '@/types/post';
-
-interface MediaItem {
-    id: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-}
 
 interface SocialAccount {
     id: string;

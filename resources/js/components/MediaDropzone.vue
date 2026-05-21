@@ -2,12 +2,7 @@
 import { IconCloudUpload, IconPhoto, IconVideo, IconX, IconLoader2, IconPlus } from '@tabler/icons-vue';
 import { computed, ref } from 'vue';
 
-interface MediaItem {
-    id: string;
-    url: string;
-    type: string;
-    original_filename: string;
-}
+import type { MediaItem } from '@/types/media';
 
 interface Props {
     media: MediaItem[];

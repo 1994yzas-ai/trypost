@@ -15,6 +15,7 @@ import { usePageErrors } from '@/composables/usePageErrors';
 import { getPlatformLabel, getPlatformLogo } from '@/composables/usePlatformLogo';
 import { Platform } from '@/enums/platform';
 import type { PinterestBoard } from '@/types';
+import type { MediaItem } from '@/types/media';
 import { PostPlatformStatus } from '@/types/post';
 
 interface SocialAccount {
@@ -68,14 +69,6 @@ interface TikTokCreatorInfo {
     duet_disabled: boolean;
     stitch_disabled: boolean;
     max_video_post_duration_sec: number | null;
-}
-
-interface MediaItem {
-    id: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    meta?: Record<string, any>;
 }
 
 const props = defineProps<{

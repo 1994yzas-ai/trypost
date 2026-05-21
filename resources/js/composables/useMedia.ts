@@ -1,18 +1,7 @@
 import { getMediaRulesForContentType } from '@/composables/useMediaRules';
+import type { MediaItem } from '@/types/media';
 
-export interface MediaItem {
-    id: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-    size?: number;
-    meta?: {
-        width?: number;
-        height?: number;
-        duration?: number;
-    };
-}
+export type { MediaItem } from '@/types/media';
 
 export interface MediaValidationWarning {
     key: string; // short key, e.g. 'gif_not_allowed'

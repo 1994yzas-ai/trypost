@@ -19,6 +19,7 @@ use App\Http\Resources\Api\PostPreviewResource;
 use App\Http\Resources\Api\PostResource;
 use App\Models\Post;
 use App\Services\Post\MediaAttacher;
+use App\Support\PostStatusRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -69,7 +70,7 @@ class PostController extends Controller
 
         if (data_get($result, 'action') === PostAction::Finalized) {
             return response()->json(
-                ['message' => 'Cannot edit a post in a terminal state.'],
+                ['message' => PostStatusRules::editBlockedMessage()],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }

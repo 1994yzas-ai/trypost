@@ -3,7 +3,7 @@ import { IconDots, IconPhoto } from '@tabler/icons-vue';
 import { computed } from 'vue';
 
 import PostMediaPreview from '@/components/posts/previews/PostMediaPreview.vue';
-import type { MediaItem } from '@/composables/useMedia';
+import type { MediaItem } from '@/types/media';
 
 interface SocialAccount {
     id: string;
