@@ -9,20 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import type { MediaItem } from '@/types/media';
 import { regenerateMedia as regeneratePostAiMedia } from '@/routes/app/posts/ai';
-
-interface MediaItem {
-    id: string;
-    path: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-    size?: number;
-    source?: 'ai' | 'unsplash' | 'giphy';
-    source_meta?: Record<string, unknown>;
-    meta?: { width?: number; height?: number; duration?: number };
-}
 
 interface RegenerationPayload {
     media: MediaItem;

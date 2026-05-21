@@ -22,6 +22,8 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class RegeneratePostMediaImage implements ShouldQueue
@@ -60,29 +62,68 @@ class RegeneratePostMediaImage implements ShouldQueue
     public function handle(): void
     {
         $workspace = Workspace::query()->findOrFail($this->workspaceId);
-        $post = Post::query()
-            ->where('workspace_id', $workspace->id)
-            ->with(['postPlatforms.socialAccount', 'workspace'])
-            ->findOrFail($this->postId);
+        $post = $this->loadPost($workspace);
+        $target = $this->resolveAiMediaTarget($post);
 
-        $mediaItems = collect($post->media ?? []);
-        $targetIndex = $mediaItems->search(fn ($item) => data_get($item, 'id') === $this->mediaId);
-        if ($targetIndex === false) {
-            throw new \RuntimeException('Media item no longer exists in post.');
-        }
-
-        $target = $mediaItems->get($targetIndex);
-        if (data_get($target, 'source') !== Source::Ai->value) {
-            throw new \RuntimeException('Only AI media can be regenerated.');
-        }
-
-        $sourceMeta = data_get($target, 'source_meta');
         $baseContext = $this->buildSourceContext(
-            sourceMeta: is_array($sourceMeta) ? $sourceMeta : [],
+            sourceMeta: is_array(data_get($target, 'source_meta')) ? data_get($target, 'source_meta') : [],
             post: $post,
             workspace: $workspace,
         );
 
+        $copy = $this->regenerateSlideCopy($workspace, $post, $baseContext);
+        $rendered = $this->renderRegeneratedImage($workspace, $post, $copy, $baseContext);
+        $newMediaItem = $this->replaceMediaOnPost($post, $target, $workspace, $rendered);
+
+        PostMediaRegenerated::dispatch(
+            userId: $this->userId,
+            regenerationId: $this->regenerationId,
+            postId: $post->id,
+            media: $newMediaItem,
+            error: null,
+        );
+    }
+
+    private function loadPost(Workspace $workspace): Post
+    {
+        return Post::query()
+            ->where('workspace_id', $workspace->id)
+            ->with(['postPlatforms.socialAccount', 'workspace'])
+            ->findOrFail($this->postId);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveAiMediaTarget(Post $post): array
+    {
+        $target = collect($post->media ?? [])
+            ->first(fn ($item) => data_get($item, 'id') === $this->mediaId);
+
+        if (! is_array($target)) {
+            throw new RuntimeException('Media item no longer exists in post.');
+        }
+
+        if (data_get($target, 'source') !== Source::Ai->value) {
+            throw new RuntimeException('Only AI media can be regenerated.');
+        }
+
+        return $target;
+    }
+
+    /**
+     * @param  array{
+     *   title: string,
+     *   body: string,
+     *   keywords: array<int, string>,
+     *   language: string,
+     *   width: int,
+     *   height: int
+     * }  $baseContext
+     * @return array{title: string, body: string, keywords: array<int, string>}
+     */
+    private function regenerateSlideCopy(Workspace $workspace, Post $post, array $baseContext): array
+    {
         /** @var PostImageRegenerator $agent */
         $agent = app(PostImageRegenerator::class, ['workspace' => $workspace]);
 
@@ -105,44 +146,88 @@ class RegeneratePostMediaImage implements ShouldQueue
             metadata: ['agent' => 'post_image_regenerator'],
         );
 
-        $structured = $response->structured ?? [];
+        return $this->mergeStructuredCopy($baseContext, $response->structured ?? []);
+    }
 
-        $title = trim((string) data_get($structured, 'title', $baseContext['title']));
-        $body = trim((string) data_get($structured, 'body', $baseContext['body']));
-        $keywords = collect(data_get($structured, 'keywords', $baseContext['keywords']))
-            ->filter(fn ($keyword) => is_string($keyword) && trim($keyword) !== '')
-            ->map(fn (string $keyword) => trim($keyword))
-            ->values()
-            ->all();
+    /**
+     * @param  array{
+     *   title: string,
+     *   body: string,
+     *   keywords: array<int, string>,
+     *   language: string,
+     *   width: int,
+     *   height: int
+     * }  $baseContext
+     * @param  array<string, mixed>  $structured
+     * @return array{title: string, body: string, keywords: array<int, string>}
+     */
+    private function mergeStructuredCopy(array $baseContext, array $structured): array
+    {
+        $keywords = $this->normalizeKeywords(data_get($structured, 'keywords', $baseContext['keywords']));
 
-        if ($keywords === []) {
-            $keywords = $baseContext['keywords'];
-        }
+        return [
+            'title' => trim((string) data_get($structured, 'title', $baseContext['title'])),
+            'body' => trim((string) data_get($structured, 'body', $baseContext['body'])),
+            'keywords' => $keywords !== [] ? $keywords : $baseContext['keywords'],
+        ];
+    }
 
+    /**
+     * @param  array{title: string, body: string, keywords: array<int, string>}  $copy
+     * @param  array{
+     *   title: string,
+     *   body: string,
+     *   keywords: array<int, string>,
+     *   language: string,
+     *   width: int,
+     *   height: int
+     * }  $baseContext
+     * @return array{path: string, source_meta: array<string, mixed>}
+     */
+    private function renderRegeneratedImage(
+        Workspace $workspace,
+        Post $post,
+        array $copy,
+        array $baseContext,
+    ): array {
         $socialAccount = $this->resolveSocialAccount($post, $workspace);
+
         if (! $socialAccount) {
-            throw new \RuntimeException('No social account available for image footer rendering.');
+            throw new RuntimeException('No social account available for image footer rendering.');
         }
 
-        $generator = app(TemplateImageGenerator::class);
-        $rendered = $generator->render(
+        $rendered = app(TemplateImageGenerator::class)->render(
             workspace: $workspace,
             socialAccount: $socialAccount,
-            title: $title,
-            body: $body,
-            imageKeywords: $keywords,
+            title: $copy['title'],
+            body: $copy['body'],
+            imageKeywords: $copy['keywords'],
             width: $baseContext['width'],
             height: $baseContext['height'],
         );
 
         if (! $rendered) {
-            throw new \RuntimeException('Image generator failed to produce media.');
+            throw new RuntimeException('Image generator failed to produce media.');
         }
 
-        $renderedPath = (string) data_get($rendered, 'path');
+        return $rendered;
+    }
+
+    /**
+     * @param  array<string, mixed>  $target
+     * @param  array{path: string, source_meta: array<string, mixed>}  $rendered
+     * @return array<string, mixed>
+     */
+    private function replaceMediaOnPost(
+        Post $post,
+        array $target,
+        Workspace $workspace,
+        array $rendered,
+    ): array {
+        $renderedPath = $rendered['path'];
 
         try {
-            $newMediaItem = DB::transaction(function () use ($post, $rendered, $target, $workspace) {
+            return DB::transaction(function () use ($post, $rendered, $target, $workspace) {
                 $newMediaItem = $this->buildAiMediaItem($workspace, $rendered);
 
                 $fresh = Post::query()->whereKey($post->id)->lockForUpdate()->firstOrFail();
@@ -150,15 +235,13 @@ class RegeneratePostMediaImage implements ShouldQueue
 
                 $currentIndex = $items->search(fn ($item) => data_get($item, 'id') === $this->mediaId);
                 if ($currentIndex === false) {
-                    throw new \RuntimeException('Media item changed before regeneration completed.');
+                    throw new RuntimeException('Media item changed before regeneration completed.');
                 }
 
                 $items->put($currentIndex, $newMediaItem);
-
                 $fresh->update(['media' => $items->values()->all()]);
 
-                $oldMediaId = data_get($target, 'id');
-                Media::query()->where('id', $oldMediaId)->first()?->delete();
+                Media::query()->where('id', data_get($target, 'id'))->first()?->delete();
 
                 return $newMediaItem;
             });
@@ -167,14 +250,6 @@ class RegeneratePostMediaImage implements ShouldQueue
 
             throw $exception;
         }
-
-        PostMediaRegenerated::dispatch(
-            userId: $this->userId,
-            regenerationId: $this->regenerationId,
-            postId: $post->id,
-            media: $newMediaItem,
-            error: null,
-        );
     }
 
     private function discardRenderedFile(string $path): void
@@ -199,20 +274,10 @@ class RegeneratePostMediaImage implements ShouldQueue
     {
         $title = trim((string) data_get($sourceMeta, 'title', ''));
         $body = trim((string) data_get($sourceMeta, 'body', ''));
-        $keywords = collect(data_get($sourceMeta, 'keywords', []))
-            ->filter(fn ($keyword) => is_string($keyword) && trim($keyword) !== '')
-            ->map(fn (string $keyword) => trim($keyword))
-            ->values()
-            ->all();
+        $keywords = $this->normalizeKeywords(data_get($sourceMeta, 'keywords', []));
 
-        // Fallback path for older AI media without source metadata.
         if ($title === '' && $body === '') {
-            $derived = trim((string) $post->content);
-            if ($derived !== '') {
-                $lines = preg_split('/\R+/', $derived) ?: [];
-                $title = trim((string) data_get($lines, 0, ''));
-                $body = trim(collect($lines)->slice(1)->implode(' '));
-            }
+            [$title, $body] = $this->titleAndBodyFromPostContent($post);
         }
 
         if ($title === '') {
@@ -220,13 +285,7 @@ class RegeneratePostMediaImage implements ShouldQueue
         }
 
         if ($keywords === []) {
-            $keywords = collect(preg_split('/\s+/', "{$title} {$body}") ?: [])
-                ->filter(fn ($word) => is_string($word) && mb_strlen(trim($word)) >= 4)
-                ->map(fn (string $word) => trim($word, ".,!?;:\"'()[]{}"))
-                ->filter()
-                ->take(8)
-                ->values()
-                ->all();
+            $keywords = $this->keywordsFromCopy($title, $body);
         }
 
         if ($keywords === []) {
@@ -241,6 +300,56 @@ class RegeneratePostMediaImage implements ShouldQueue
             'width' => (int) data_get($sourceMeta, 'width', TemplateImageGenerator::DEFAULT_WIDTH),
             'height' => (int) data_get($sourceMeta, 'height', TemplateImageGenerator::DEFAULT_HEIGHT),
         ];
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function titleAndBodyFromPostContent(Post $post): array
+    {
+        $lines = Str::of((string) $post->content)
+            ->replace(["\r\n", "\r"], "\n")
+            ->trim()
+            ->explode("\n")
+            ->map(fn (string $line) => trim($line))
+            ->filter()
+            ->values();
+
+        if ($lines->isEmpty()) {
+            return ['', ''];
+        }
+
+        return [
+            (string) $lines->first(),
+            $lines->slice(1)->implode(' '),
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function keywordsFromCopy(string $title, string $body): array
+    {
+        return Str::of("{$title} {$body}")
+            ->squish()
+            ->explode(' ')
+            ->map(fn (string $word) => (string) Str::of($word)->trim(".,!?;:\"'()[]{}"))
+            ->filter(fn (string $word) => mb_strlen($word) >= 4)
+            ->take(8)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function normalizeKeywords(mixed $keywords): array
+    {
+        return collect($keywords)
+            ->filter(fn ($keyword) => is_string($keyword) && trim($keyword) !== '')
+            ->map(fn (string $keyword) => trim($keyword))
+            ->values()
+            ->all();
     }
 
     private function resolveSocialAccount(Post $post, Workspace $workspace): ?SocialAccount

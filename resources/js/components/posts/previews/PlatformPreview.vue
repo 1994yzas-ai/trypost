@@ -20,13 +20,7 @@ interface SocialAccount {
     avatar_url: string | null;
 }
 
-interface MediaItem {
-    id: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-}
+import type { MediaItem } from '@/types/media';
 
 interface Props {
     platform: string;

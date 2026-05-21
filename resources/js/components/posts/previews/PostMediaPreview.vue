@@ -3,7 +3,8 @@ import { IconChevronLeft, IconChevronRight, IconPhoto } from '@tabler/icons-vue'
 import { computed, ref, watch, type Component } from 'vue';
 
 import VideoPreview from '@/components/posts/previews/VideoPreview.vue';
-import { isVideoMedia, type MediaItem } from '@/composables/useMedia';
+import { isVideoMedia } from '@/composables/useMedia';
+import type { MediaItem } from '@/types/media';
 
 interface Props {
     media: MediaItem[];

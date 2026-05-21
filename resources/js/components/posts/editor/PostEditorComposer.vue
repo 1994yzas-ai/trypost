@@ -22,19 +22,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatBytes } from '@/composables/useMedia';
 import { getPlatformLabel, getPlatformLogo } from '@/composables/usePlatformLogo';
-
-interface MediaItem {
-    id: string;
-    path: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-    size?: number;
-    source?: 'ai' | 'unsplash' | 'giphy';
-    source_meta?: Record<string, unknown>;
-    meta?: { width?: number; height?: number; duration?: number };
-}
+import type { MediaItem } from '@/types/media';
 
 interface Signature {
     id: string;

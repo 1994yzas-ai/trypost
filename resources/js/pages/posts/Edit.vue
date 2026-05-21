@@ -23,20 +23,8 @@ import debounce from '@/debounce';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { destroy as destroyPost, update as updatePost } from '@/routes/app/posts';
 import type { PinterestBoard } from '@/types';
+import type { MediaItem } from '@/types/media';
 import { PostStatus } from '@/types/post';
-
-interface MediaItem {
-    id: string;
-    path: string;
-    url: string;
-    type?: string;
-    mime_type?: string;
-    original_filename?: string;
-    size?: number;
-    source?: 'ai' | 'unsplash' | 'giphy';
-    source_meta?: Record<string, unknown>;
-    meta?: { width?: number; height?: number; duration?: number };
-}
 
 interface SocialAccount {
     id: string;

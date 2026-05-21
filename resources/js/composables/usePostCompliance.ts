@@ -1,7 +1,8 @@
 import { trans } from 'laravel-vue-i18n';
 import { computed, type ComputedRef, type Ref } from 'vue';
 
-import { getMediaItemIssue, type MediaItem } from '@/composables/useMedia';
+import { getMediaItemIssue } from '@/composables/useMedia';
+import type { MediaItem } from '@/types/media';
 import { getMediaRulesForContentType } from '@/composables/useMediaRules';
 import { getPlatformLabel } from '@/composables/usePlatformLogo';
 import { ContentType } from '@/enums/content-type';
