@@ -40,10 +40,13 @@ services:
       BROADCAST_CONNECTION: reverb
 
       # ===== WebSockets (Reverb) =====
+      # These are the INTERNAL server->Reverb connection — leave as-is even on a
+      # domain. The browser derives the WebSocket host from its own URL, and the
+      # in-container nginx proxies it on /app, so it just works on any domain.
       REVERB_APP_ID: "1001"
-      REVERB_APP_KEY: trypost-reverb-key
+      REVERB_APP_KEY: trypost-reverb-key           # matches the key baked into the published image
       REVERB_APP_SECRET: change-me-reverb-secret   # <- change me
-      REVERB_HOST: localhost            # <- for a real domain, set to that host (and PORT 443 / SCHEME https)
+      REVERB_HOST: localhost
       REVERB_PORT: "8080"
       REVERB_SCHEME: http
 
@@ -102,8 +105,7 @@ services:
       # ANTHROPIC_API_KEY: ""
       # GEMINI_API_KEY: ""
     ports:
-      - "8000:80"     # app (nginx)
-      - "8080:8080"   # Reverb WebSocket
+      - "8000:80"     # app (nginx); WebSocket rides this same port via /app
     volumes:
       - storage:/var/www/html/storage/app
     depends_on:
@@ -141,7 +143,33 @@ services:
       timeout: 3s
       retries: 5
 
+  # Optional reverse proxy with automatic HTTPS (Let's Encrypt).
+  # To serve on a domain:
+  #   1. Point the domain's DNS at this host.
+  #   2. Set APP_DOMAIN below and APP_URL above to https://<that domain>.
+  #   3. Start with the proxy profile:
+  #        docker compose -f compose.prod.yaml --profile proxy up -d
+  # Without the profile, the app is served directly on http://localhost:8000.
+  caddy:
+    image: caddy:2-alpine
+    container_name: trypost-caddy
+    restart: unless-stopped
+    profiles: [proxy]
+    environment:
+      APP_DOMAIN: post.example.com    # <- your domain
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
 volumes:
   pgdata:
   redisdata:
   storage:
+  caddy-data:
+  caddy-config:
