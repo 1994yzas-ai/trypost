@@ -6,6 +6,17 @@ import i18n from 'laravel-vue-i18n/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+    server: {
+        host: '0.0.0.0',
+        port: 5173,
+        allowedHosts: true,
+        hmr: {
+            host: '0.0.0.0',
+        },
+        watch: {
+            ignored: ['**/.cache/**', '**/node_modules/**', '**/vendor/**', '**/storage/**'],
+        },
+    },
     plugins: [
         laravel({
             input: ['resources/js/app.ts', 'resources/css/app.css'],
